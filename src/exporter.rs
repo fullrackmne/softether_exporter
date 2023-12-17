@@ -4,13 +4,12 @@ use hyper::{header::ContentType, mime::{Mime, SubLevel, TopLevel}, server::{Requ
 use lazy_static::lazy_static;
 use prometheus::{Encoder, Gauge, GaugeVec, register_gauge, register_gauge_vec, TextEncoder};
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
-use systemstat::{System, Platform, saturating_sub_bytes};
+use systemstat::{System, Platform};
 
 lazy_static! {
     static ref UP: GaugeVec =
@@ -156,7 +155,7 @@ impl Exporter {
 
                 if let Ok(load) = sys.load_average() {
                     let cpu_load = load.one; // 1-minute average
-                    SYSTEM_CPU_LOAD.set(cpu_load);
+                    SYSTEM_CPU_LOAD.set(cpu_load.into());
                 }
 
                 if let Ok(mem) = sys.memory() {
@@ -172,9 +171,9 @@ impl Exporter {
                 }
 
                 if let Ok(load_avg) = sys.load_average() {
-                    SYSTEM_LOAD_AVERAGE.with_label_values(&["1_min"]).set(load_avg.one);
-                    SYSTEM_LOAD_AVERAGE.with_label_values(&["5_min"]).set(load_avg.five);
-                    SYSTEM_LOAD_AVERAGE.with_label_values(&["15_min"]).set(load_avg.fifteen);
+                    SYSTEM_LOAD_AVERAGE.with_label_values(&["1_min"]).set(load_avg.one.into());
+                    SYSTEM_LOAD_AVERAGE.with_label_values(&["5_min"]).set(load_avg.five.into());
+                    SYSTEM_LOAD_AVERAGE.with_label_values(&["15_min"]).set(load_avg.fifteen.into());
                 }
 
                 if let Ok(uptime) = sys.uptime() {
@@ -182,7 +181,7 @@ impl Exporter {
                 }
                 
                 if let Ok(boot_time) = sys.boot_time() {
-                    SYSTEM_BOOT_TIME.set(boot_time.timestamp() as f64);
+                    SYSTEM_BOOT_TIME.set(boot_time.unix_timestamp() as f64);
                 }
                 
                 if let Ok(networks) = sys.networks() {
