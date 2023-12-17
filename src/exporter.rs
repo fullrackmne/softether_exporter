@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use prometheus::{Encoder, Gauge, GaugeVec, register_gauge, register_gauge_vec, TextEncoder};
 use serde::Deserialize;
 use std::{collections::HashMap, fs::File, io::Read, path::Path, thread, process::Command};
-use sysinfo::{System, SystemExt, DiskExt};
+use sysinfo::{System, SystemExt, DiskExt, ProcessorExt};
 
 lazy_static! {
     static ref UP: GaugeVec =
@@ -192,10 +192,9 @@ impl Exporter {
                 sys.refresh_all();
 
                 pub fn setup_metrics() {
-                    let mut sys = System::new_all();
-                    sys.refresh_all();
-                
                     let update_metrics = || {
+                        let mut sys = System::new_all();
+                        sys.refresh_all();
                         sys.refresh_cpu();
                 
                         let cpu_usage = if *IS_VIRTUALIZED {
@@ -204,8 +203,12 @@ impl Exporter {
                             sys.global_processor_info().cpu_usage() as f64
                         };
                         SYSTEM_CPU_LOAD.set(cpu_usage.round());
-                    }
+                    };
+                
+                    // Call the closure to update metrics
+                    update_metrics();
                 }
+                
 
                 let total_memory = sys.total_memory();
                 let used_memory = sys.used_memory();
