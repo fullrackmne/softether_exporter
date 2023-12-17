@@ -17,6 +17,11 @@ use toml;
 use std::thread;
 
 lazy_static! {
+    static ref BUILD_INFO: GaugeVec = register_gauge_vec!(
+        "softether_build_info",
+        "A metric with a constant '1' value labeled by version, revision, and rustversion",
+        &["version", "revision", "rustversion"]
+    ).unwrap();
     static ref UP: GaugeVec =
         register_gauge_vec!("softether_up", "The last query is successful.", &["hub"]).unwrap();
     static ref ONLINE: GaugeVec =
