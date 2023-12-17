@@ -193,7 +193,6 @@ impl Exporter {
                     }
                 }            
                 
-
                 // Refresh SoftEther metrics for each hub
                 for hub in hubs.clone() {
                     let name = hub.name.unwrap_or(String::from(""));
@@ -209,31 +208,23 @@ impl Exporter {
                 
                     UP.with_label_values(&[&name]).set(1.0);
                     ONLINE.with_label_values(&[&name]).set(if status.online { 1.0 } else { 0.0 });
-                    SESSIONS.with_label_values(&[&name]).set(status.sessions as f64);
-                    SESSIONS_CLIENT.with_label_values(&[&name]).set(status.sessions_client as f64);
-                    SESSIONS_BRIDGE.with_label_values(&[&name]).set(status.sessions_bridge as f64);
-                    USERS.with_label_values(&[&name]).set(status.users as f64);
-                    GROUPS.with_label_values(&[&name]).set(status.groups as f64);
-                    MAC_TABLES.with_label_values(&[&name]).set(status.mac_tables as f64);
-                    IP_TABLES.with_label_values(&[&name]).set(status.ip_tables as f64);
-                    LOGINS.with_label_values(&[&name]).set(status.logins as f64);
-                    OUTGOING_UNICAST_PACKETS.with_label_values(&[&name]).set(status.outgoing_unicast_packets as f64);
-                    OUTGOING_UNICAST_BYTES.with_label_values(&[&name]).set(status.outgoing_unicast_bytes as f64);
-                    OUTGOING_BROADCAST_PACKETS.with_label_values(&[&name]).set(status.outgoing_broadcast_packets as f64);
-                    OUTGOING_BROADCAST_BYTES.with_label_values(&[&name]).set(status.outgoing_broadcast_bytes as f64);
-                    INCOMING_UNICAST_PACKETS.with_label_values(&[&name]).set(status.incoming_unicast_packets as f64);
-                    INCOMING_UNICAST_BYTES.with_label_values(&[&name]).set(status.incoming_unicast_bytes as f64);
-                    INCOMING_BROADCAST_PACKETS.with_label_values(&[&name]).set(status.incoming_broadcast_packets as f64);
-                    INCOMING_BROADCAST_BYTES.with_label_values(&[&name]).set(status.incoming_broadcast_bytes as f64);
-                
-                    // Assuming `status` has fields like user_transfer_bytes, user_transfer_packets per user
-                    for (user, bytes) in status.user_transfer_bytes.iter() {
-                        USER_TRANSFER_BYTES.with_label_values(&[&name, user]).set(*bytes as f64);
-                    }
-                    for (user, packets) in status.user_transfer_packets.iter() {
-                        USER_TRANSFER_PACKETS.with_label_values(&[&name, user]).set(*packets as f64);
-                    }
-                }                
+                    SESSIONS.with_label_values(&[&name]).set(status.sessions);
+                    SESSIONS_CLIENT.with_label_values(&[&name]).set(status.sessions_client);
+                    SESSIONS_BRIDGE.with_label_values(&[&name]).set(status.sessions_bridge);
+                    USERS.with_label_values(&[&name]).set(status.users);
+                    GROUPS.with_label_values(&[&name]).set(status.groups);
+                    MAC_TABLES.with_label_values(&[&name]).set(status.mac_tables);
+                    IP_TABLES.with_label_values(&[&name]).set(status.ip_tables);
+                    LOGINS.with_label_values(&[&name]).set(status.logins);
+                    OUTGOING_UNICAST_PACKETS.with_label_values(&[&name]).set(status.outgoing_unicast_packets);
+                    OUTGOING_UNICAST_BYTES.with_label_values(&[&name]).set(status.outgoing_unicast_bytes);
+                    OUTGOING_BROADCAST_PACKETS.with_label_values(&[&name]).set(status.outgoing_broadcast_packets);
+                    OUTGOING_BROADCAST_BYTES.with_label_values(&[&name]).set(status.outgoing_broadcast_bytes);
+                    INCOMING_UNICAST_PACKETS.with_label_values(&[&name]).set(status.incoming_unicast_packets);
+                    INCOMING_UNICAST_BYTES.with_label_values(&[&name]).set(status.incoming_unicast_bytes);
+                    INCOMING_BROADCAST_PACKETS.with_label_values(&[&name]).set(status.incoming_broadcast_packets);
+                    INCOMING_BROADCAST_BYTES.with_label_values(&[&name]).set(status.incoming_broadcast_bytes);
+                }                            
 
                 // Gather and encode metrics
                 let metric_familys = prometheus::gather();
