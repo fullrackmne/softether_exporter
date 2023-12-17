@@ -22,6 +22,7 @@ prometheus   = "0.13"
 serde        = {version = "1.0", features = ["derive"]}
 structopt    = "0.3"
 toml         = "0.8"
+sysinfo      = "0.21"
 
 [package.metadata.release]
 dev-version-ext             = "pre"
