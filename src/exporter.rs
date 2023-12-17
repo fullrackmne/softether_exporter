@@ -1,20 +1,12 @@
 use crate::softether_reader::SoftEtherReader;
 use anyhow::Error;
-use hyper::header::ContentType;
-use hyper::mime::{Mime, SubLevel, TopLevel};
-use hyper::server::{Request, Response, Server};
-use hyper::uri::RequestUri;
+use hyper::{header::ContentType, mime::{Mime, SubLevel, TopLevel}, server::{Request, Response, Server}, uri::RequestUri};
 use lazy_static::lazy_static;
-use prometheus;
-use prometheus::{register_gauge, register_gauge_vec, Encoder, Gauge, GaugeVec, TextEncoder};
+use prometheus::{Encoder, Gauge, GaugeVec, register_gauge, register_gauge_vec, TextEncoder};
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-use toml;
-use std::thread;
+use std::{collections::HashMap, fs::File, io::Read, path::Path, thread, process::Command};
 use sysinfo::{System, SystemExt, ProcessorExt, DiskExt};
+
 
 lazy_static! {
     static ref UP: GaugeVec =
@@ -112,6 +104,9 @@ lazy_static! {
         "system_free_disk_space",
         "Free disk space on the system as a percentage."
     ).unwrap();
+
+    static ref IS_VIRTUALIZED: bool = check_if_virtualized();
+    static ref AVAILABLE_CORES: usize = get_available_cores();
 }
 
 static LANDING_PAGE: &'static str = "<html>
@@ -125,6 +120,26 @@ static LANDING_PAGE: &'static str = "<html>
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static GIT_REVISION: Option<&'static str> = option_env!("GIT_REVISION");
 static RUST_VERSION: Option<&'static str> = option_env!("RUST_VERSION");
+
+fn check_if_virtualized() -> bool {
+    // Run the `systemd-detect-virt` command, which is available on most Linux systems, including Ubuntu
+    let output = Command::new("systemd-detect-virt")
+        .output()
+        .expect("Failed to execute command");
+
+    if output.status.success() {
+        let result = String::from_utf8_lossy(&output.stdout);
+        // If the output is "none" or empty, it's not a virtualized environment
+        return result.trim() != "none" && !result.trim().is_empty();
+    }
+
+    false
+}
+
+fn get_available_cores() -> usize {
+    let sys = System::new_all();
+    sys.processors().len()
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -177,13 +192,26 @@ impl Exporter {
                 let mut sys = System::new_all();
                 sys.refresh_all();
 
-                let cpu_usage = sys.global_processor_info().cpu_usage() as f64;
-                SYSTEM_CPU_LOAD.set(cpu_usage);
+                pub fn setup_metrics() {
+                    let mut sys = System::new_all();
+                    sys.refresh_all();
+                
+                    pub fn update_metrics() {
+                        sys.refresh_cpu();
+                
+                        let cpu_usage = if *IS_VIRTUALIZED {
+                            sys.global_processor_info().cpu_usage() as f64 / *AVAILABLE_CORES as f64
+                        } else {
+                            sys.global_processor_info().cpu_usage() as f64
+                        };
+                        SYSTEM_CPU_LOAD.set(cpu_usage.round());
+                    }
+                }
 
                 let total_memory = sys.total_memory();
                 let used_memory = sys.used_memory();
                 let memory_usage = (used_memory as f64 / total_memory as f64) * 100.0;
-                SYSTEM_MEMORY_USAGE.set(memory_usage);
+                SYSTEM_MEMORY_USAGE.set(memory_usage.round());
 
                 let total_disk_space = sys.disks().iter().map(|d| d.total_space()).sum::<u64>();
                 let total_free_disk_space = sys.disks().iter().map(|d| d.available_space()).sum::<u64>();
@@ -192,7 +220,7 @@ impl Exporter {
                 } else {
                     0.0
                 };
-                SYSTEM_FREE_DISK_SPACE.set(free_disk_space_percentage);
+                SYSTEM_FREE_DISK_SPACE.set(free_disk_space_percentage.round());
 
                 // Refresh SoftEther metrics for each hub
                 for hub in hubs.clone() {
