@@ -1,105 +1,60 @@
 use crate::softether_reader::SoftEtherReader;
 use anyhow::Error;
-use hyper::header::ContentType;
-use hyper::mime::{Mime, SubLevel, TopLevel};
-use hyper::server::{Request, Response, Server};
-use hyper::uri::RequestUri;
+use hyper::{header::ContentType, mime::{Mime, SubLevel, TopLevel}, server::{Request, Response, Server}, uri::RequestUri};
 use lazy_static::lazy_static;
-use prometheus;
-use prometheus::{register_gauge, register_gauge_vec, Encoder, Gauge, GaugeVec, TextEncoder};
+use prometheus::{Encoder, Gauge, GaugeVec, register_gauge, register_gauge_vec, TextEncoder};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use toml;
 use std::thread;
-use sysinfo::{System, SystemExt, ProcessorExt, DiskExt};
+use std::time::Duration;
+use systemstat::{System, Platform, saturating_sub_bytes};
 
 lazy_static! {
     static ref UP: GaugeVec =
         register_gauge_vec!("softether_up", "The last query is successful.", &["hub"]).unwrap();
     static ref ONLINE: GaugeVec =
         register_gauge_vec!("softether_online", "Hub online.", &["hub"]).unwrap();
-    static ref SESSIONS: GaugeVec =
+    static ref SESSIONS: GaugeVec = 
         register_gauge_vec!("softether_sessions", "Number of sessions.", &["hub"]).unwrap();
-    static ref SESSIONS_CLIENT: GaugeVec = register_gauge_vec!(
-        "softether_sessions_client",
-        "Number of client sessions.",
-        &["hub"]
-    ).unwrap();
-    static ref SESSIONS_BRIDGE: GaugeVec = register_gauge_vec!(
-        "softether_sessions_bridge",
-        "Number of bridge sessions.",
-        &["hub"]
-    ).unwrap();
-    static ref USERS: GaugeVec =
+    static ref SESSIONS_CLIENT: GaugeVec = 
+        register_gauge_vec!("softether_sessions_client", "Number of client sessions.", &["hub"]).unwrap();
+    static ref SESSIONS_BRIDGE: GaugeVec = 
+        register_gauge_vec!("softether_sessions_bridge", "Number of bridge sessions.", &["hub"]).unwrap();
+    static ref USERS: GaugeVec = 
         register_gauge_vec!("softether_users", "Number of users.", &["hub"]).unwrap();
-    static ref GROUPS: GaugeVec =
+    static ref GROUPS: GaugeVec = 
         register_gauge_vec!("softether_groups", "Number of groups.", &["hub"]).unwrap();
-    static ref MAC_TABLES: GaugeVec = register_gauge_vec!(
-        "softether_mac_tables",
-        "Number of entries in MAC table.",
-        &["hub"]
-    ).unwrap();
-    static ref IP_TABLES: GaugeVec = register_gauge_vec!(
-        "softether_ip_tables",
-        "Number of entries in IP table.",
-        &["hub"]
-    ).unwrap();
-    static ref LOGINS: GaugeVec =
+    static ref MAC_TABLES: GaugeVec = 
+        register_gauge_vec!("softether_mac_tables", "Number of entries in MAC table.", &["hub"]).unwrap();
+    static ref IP_TABLES: GaugeVec = 
+        register_gauge_vec!("softether_ip_tables", "Number of entries in IP table.", &["hub"]).unwrap();
+    static ref LOGINS: GaugeVec = 
         register_gauge_vec!("softether_logins", "Number of logins.", &["hub"]).unwrap();
-    static ref OUTGOING_UNICAST_PACKETS: GaugeVec = register_gauge_vec!(
-        "softether_outgoing_unicast_packets",
-        "Outgoing unicast transfer in packets.",
-        &["hub"]
-    ).unwrap();
-    static ref OUTGOING_UNICAST_BYTES: GaugeVec = register_gauge_vec!(
-        "softether_outgoing_unicast_bytes",
-        "Outgoing unicast transfer in bytes.",
-        &["hub"]
-    ).unwrap();
-    static ref OUTGOING_BROADCAST_PACKETS: GaugeVec = register_gauge_vec!(
-        "softether_outgoing_broadcast_packets",
-        "Outgoing broadcast transfer in packets.",
-        &["hub"]
-    ).unwrap();
-    static ref OUTGOING_BROADCAST_BYTES: GaugeVec = register_gauge_vec!(
-        "softether_outgoing_broadcast_bytes",
-        "Outgoing broadcast transfer in bytes.",
-        &["hub"]
-    ).unwrap();
-    static ref INCOMING_UNICAST_PACKETS: GaugeVec = register_gauge_vec!(
-        "softether_incoming_unicast_packets",
-        "Incoming unicast transfer in packets.",
-        &["hub"]
-    ).unwrap();
-    static ref INCOMING_UNICAST_BYTES: GaugeVec = register_gauge_vec!(
-        "softether_incoming_unicast_bytes",
-        "Incoming unicast transfer in bytes.",
-        &["hub"]
-    ).unwrap();
-    static ref INCOMING_BROADCAST_PACKETS: GaugeVec = register_gauge_vec!(
-        "softether_incoming_broadcast_packets",
-        "Incoming broadcast transfer in packets.",
-        &["hub"]
-    ).unwrap();
-    static ref INCOMING_BROADCAST_BYTES: GaugeVec = register_gauge_vec!(
-        "softether_incoming_broadcast_bytes",
-        "Incoming broadcast transfer in bytes.",
-        &["hub"]
-    ).unwrap();
-    static ref USER_TRANSFER_BYTES: GaugeVec = register_gauge_vec!(
-        "softether_user_transfer_bytes",
-        "User transfer in bytes.",
-        &["hub", "user"]
-    ).unwrap();
-    static ref USER_TRANSFER_PACKETS: GaugeVec = register_gauge_vec!(
-        "softether_user_transfer_packets",
-        "User transfer in packets.",
-        &["hub", "user"]
-    ).unwrap();
-    // New system metrics
+    static ref OUTGOING_UNICAST_PACKETS: GaugeVec = 
+        register_gauge_vec!("softether_outgoing_unicast_packets", "Outgoing unicast transfer in packets.", &["hub"]).unwrap();
+    static ref OUTGOING_UNICAST_BYTES: GaugeVec = 
+        register_gauge_vec!("softether_outgoing_unicast_bytes", "Outgoing unicast transfer in bytes.", &["hub"]).unwrap();
+    static ref OUTGOING_BROADCAST_PACKETS: GaugeVec = 
+        register_gauge_vec!("softether_outgoing_broadcast_packets", "Outgoing broadcast transfer in packets.", &["hub"]).unwrap();
+    static ref OUTGOING_BROADCAST_BYTES: GaugeVec = 
+        register_gauge_vec!("softether_outgoing_broadcast_bytes", "Outgoing broadcast transfer in bytes.", &["hub"]).unwrap();
+    static ref INCOMING_UNICAST_PACKETS: GaugeVec = 
+        register_gauge_vec!("softether_incoming_unicast_packets", "Incoming unicast transfer in packets.", &["hub"]).unwrap();
+    static ref INCOMING_UNICAST_BYTES: GaugeVec = 
+        register_gauge_vec!("softether_incoming_unicast_bytes", "Incoming unicast transfer in bytes.", &["hub"]).unwrap();
+    static ref INCOMING_BROADCAST_PACKETS: GaugeVec = 
+        register_gauge_vec!("softether_incoming_broadcast_packets", "Incoming broadcast transfer in packets.", &["hub"]).unwrap();
+    static ref INCOMING_BROADCAST_BYTES: GaugeVec = 
+        register_gauge_vec!("softether_incoming_broadcast_bytes", "Incoming broadcast transfer in bytes.", &["hub"]).unwrap();
+    static ref USER_TRANSFER_BYTES: GaugeVec = 
+        register_gauge_vec!("softether_user_transfer_bytes", "User transfer in bytes.", &["hub", "user"]).unwrap();
+    static ref USER_TRANSFER_PACKETS: GaugeVec = 
+        register_gauge_vec!("softether_user_transfer_packets", "User transfer in packets.", &["hub", "user"]).unwrap();
+    
+    // System metrics
     static ref SYSTEM_CPU_LOAD: Gauge = register_gauge!(
         "system_cpu_load",
         "Current system CPU load as a percentage."
@@ -112,6 +67,30 @@ lazy_static! {
         "system_free_disk_space",
         "Free disk space on the system as a percentage."
     ).unwrap();
+    static ref SYSTEM_LOAD_AVERAGE: GaugeVec = register_gauge_vec!(
+        "system_load_average",
+        "Load average over 1, 5, and 15 minutes.",
+        &["interval"]
+    ).unwrap();
+    static ref SYSTEM_UPTIME: Gauge = register_gauge!(
+        "system_uptime",
+        "System uptime in seconds."
+    ).unwrap();
+    static ref SYSTEM_BOOT_TIME: Gauge = register_gauge!(
+        "system_boot_time",
+        "System boot time in UNIX timestamp."
+    ).unwrap();
+    static ref SYSTEM_NETWORK_PACKETS_IN: GaugeVec = register_gauge_vec!(
+        "system_network_packets_in",
+        "Number of packets received on the network interface.",
+        &["interface"]
+    ).unwrap();
+    static ref SYSTEM_NETWORK_PACKETS_OUT: GaugeVec = register_gauge_vec!(
+        "system_network_packets_out",
+        "Number of packets sent from the network interface.",
+        &["interface"]
+    ).unwrap();
+
 }
 
 static LANDING_PAGE: &'static str = "<html>
@@ -158,7 +137,7 @@ impl Exporter {
         let encoder = TextEncoder::new();
         let vpncmd = config.vpncmd.unwrap_or(String::from("vpncmd"));
         let server = config.server.unwrap_or(String::from("localhost"));
-        let sleep: String = config.sleep.unwrap_or(String::from("500"));
+        let sleep: u64 = config.sleep.unwrap_or(String::from("500")).parse().unwrap_or(500);
         let hubs = config.hubs;
 
         let adminpassword = config.adminpassword.unwrap_or(String::from(""));
@@ -173,26 +152,48 @@ impl Exporter {
 
         Server::http(addr)?.handle(move |req: Request, mut res: Response| {
             if req.uri == RequestUri::AbsolutePath("/metrics".to_string()) {
-                // Refresh system metrics
-                let mut sys = System::new_all();
-                sys.refresh_all();
+                let sys = System::new();
 
-                let cpu_usage = sys.global_processor_info().cpu_usage() as f64;
-                SYSTEM_CPU_LOAD.set(cpu_usage);
+                if let Ok(load) = sys.load_average() {
+                    let cpu_load = load.one; // 1-minute average
+                    SYSTEM_CPU_LOAD.set(cpu_load);
+                }
 
-                let total_memory = sys.total_memory();
-                let used_memory = sys.used_memory();
-                let memory_usage = (used_memory as f64 / total_memory as f64) * 100.0;
-                SYSTEM_MEMORY_USAGE.set(memory_usage);
+                if let Ok(mem) = sys.memory() {
+                    let memory_usage = (mem.total.as_u64() - mem.free.as_u64()) as f64 / mem.total.as_u64() as f64 * 100.0;
+                    SYSTEM_MEMORY_USAGE.set(memory_usage);
+                }
 
-                let total_disk_space = sys.disks().iter().map(|d| d.total_space()).sum::<u64>();
-                let total_free_disk_space = sys.disks().iter().map(|d| d.available_space()).sum::<u64>();
-                let free_disk_space_percentage = if total_disk_space > 0 {
-                    (total_free_disk_space as f64 / total_disk_space as f64) * 100.0
-                } else {
-                    0.0
-                };
-                SYSTEM_FREE_DISK_SPACE.set(free_disk_space_percentage);
+                if let Ok(mounts) = sys.mounts() {
+                    let total_space: u64 = mounts.iter().map(|m| m.total.as_u64()).sum();
+                    let total_free: u64 = mounts.iter().map(|m| m.avail.as_u64()).sum();
+                    let disk_usage = (total_space - total_free) as f64 / total_space as f64 * 100.0;
+                    SYSTEM_FREE_DISK_SPACE.set(disk_usage);
+                }
+
+                if let Ok(load_avg) = sys.load_average() {
+                    SYSTEM_LOAD_AVERAGE.with_label_values(&["1_min"]).set(load_avg.one);
+                    SYSTEM_LOAD_AVERAGE.with_label_values(&["5_min"]).set(load_avg.five);
+                    SYSTEM_LOAD_AVERAGE.with_label_values(&["15_min"]).set(load_avg.fifteen);
+                }
+
+                if let Ok(uptime) = sys.uptime() {
+                    SYSTEM_UPTIME.set(uptime.as_secs() as f64);
+                }
+                
+                if let Ok(boot_time) = sys.boot_time() {
+                    SYSTEM_BOOT_TIME.set(boot_time.timestamp() as f64);
+                }
+                
+                if let Ok(networks) = sys.networks() {
+                    for (interface_name, network) in networks.iter() {
+                        if let Ok(stats) = sys.network_stats(interface_name) {
+                            SYSTEM_NETWORK_PACKETS_IN.with_label_values(&[interface_name]).set(stats.rx_packets as f64);
+                            SYSTEM_NETWORK_PACKETS_OUT.with_label_values(&[interface_name]).set(stats.tx_packets as f64);
+                        }
+                    }
+                }            
+                
 
                 // Refresh SoftEther metrics for each hub
                 for hub in hubs.clone() {
@@ -206,81 +207,48 @@ impl Exporter {
                             continue;
                         }
                     };
-
-                    let sessions = match SoftEtherReader::hub_sessions(&vpncmd, &server, &name, &password) {
-                        Ok(x) => x,
-                        Err(x) => {
-                            UP.with_label_values(&[&name]).set(0.0);
-                            println!("Hub sessions read failed: {}", x);
-                            continue;
-                        }
-                    };
-
-                    UP.with_label_values(&[&status.name]).set(1.0);
-                    ONLINE.with_label_values(&[&status.name]).set(if status.online { 1.0 } else { 0.0 });
-                    SESSIONS.with_label_values(&[&status.name]).set(status.sessions);
-                    SESSIONS_CLIENT.with_label_values(&[&status.name]).set(status.sessions_client);
-                    SESSIONS_BRIDGE.with_label_values(&[&status.name]).set(status.sessions_bridge);
-                    USERS.with_label_values(&[&status.name]).set(status.users);
-                    GROUPS.with_label_values(&[&status.name]).set(status.groups);
-                    MAC_TABLES.with_label_values(&[&status.name]).set(status.mac_tables);
-                    IP_TABLES.with_label_values(&[&status.name]).set(status.ip_tables);
-                    LOGINS.with_label_values(&[&status.name]).set(status.logins);
-                    OUTGOING_UNICAST_PACKETS.with_label_values(&[&status.name]).set(status.outgoing_unicast_packets);
-                    OUTGOING_UNICAST_BYTES.with_label_values(&[&status.name]).set(status.outgoing_unicast_bytes);
-                    OUTGOING_BROADCAST_PACKETS.with_label_values(&[&status.name]).set(status.outgoing_broadcast_packets);
-                    OUTGOING_BROADCAST_BYTES.with_label_values(&[&status.name]).set(status.outgoing_broadcast_bytes);
-                    INCOMING_UNICAST_PACKETS.with_label_values(&[&status.name]).set(status.incoming_unicast_packets);
-                    INCOMING_UNICAST_BYTES.with_label_values(&[&status.name]).set(status.incoming_unicast_bytes);
-                    INCOMING_BROADCAST_PACKETS.with_label_values(&[&status.name]).set(status.incoming_broadcast_packets);
-                    INCOMING_BROADCAST_BYTES.with_label_values(&[&status.name]).set(status.incoming_broadcast_bytes);
-
-                    let mut transfer_bytes = HashMap::new();
-                    let mut transfer_packets = HashMap::new();
-                    for session in sessions {
-                        if let Some(val) = transfer_bytes.get(&session.user) {
-                            let val = val + session.transfer_bytes;
-                            transfer_bytes.insert(session.user.clone(), val);
-                        } else {
-                            let val = session.transfer_bytes;
-                            transfer_bytes.insert(session.user.clone(), val);
-                        }
-                        if let Some(val) = transfer_packets.get(&session.user) {
-                            let val = val + session.transfer_packets;
-                            transfer_packets.insert(session.user.clone(), val);
-                        } else {
-                            let val = session.transfer_packets;
-                            transfer_packets.insert(session.user.clone(), val);
-                        }
+                
+                    UP.with_label_values(&[&name]).set(1.0);
+                    ONLINE.with_label_values(&[&name]).set(if status.online { 1.0 } else { 0.0 });
+                    SESSIONS.with_label_values(&[&name]).set(status.sessions as f64);
+                    SESSIONS_CLIENT.with_label_values(&[&name]).set(status.sessions_client as f64);
+                    SESSIONS_BRIDGE.with_label_values(&[&name]).set(status.sessions_bridge as f64);
+                    USERS.with_label_values(&[&name]).set(status.users as f64);
+                    GROUPS.with_label_values(&[&name]).set(status.groups as f64);
+                    MAC_TABLES.with_label_values(&[&name]).set(status.mac_tables as f64);
+                    IP_TABLES.with_label_values(&[&name]).set(status.ip_tables as f64);
+                    LOGINS.with_label_values(&[&name]).set(status.logins as f64);
+                    OUTGOING_UNICAST_PACKETS.with_label_values(&[&name]).set(status.outgoing_unicast_packets as f64);
+                    OUTGOING_UNICAST_BYTES.with_label_values(&[&name]).set(status.outgoing_unicast_bytes as f64);
+                    OUTGOING_BROADCAST_PACKETS.with_label_values(&[&name]).set(status.outgoing_broadcast_packets as f64);
+                    OUTGOING_BROADCAST_BYTES.with_label_values(&[&name]).set(status.outgoing_broadcast_bytes as f64);
+                    INCOMING_UNICAST_PACKETS.with_label_values(&[&name]).set(status.incoming_unicast_packets as f64);
+                    INCOMING_UNICAST_BYTES.with_label_values(&[&name]).set(status.incoming_unicast_bytes as f64);
+                    INCOMING_BROADCAST_PACKETS.with_label_values(&[&name]).set(status.incoming_broadcast_packets as f64);
+                    INCOMING_BROADCAST_BYTES.with_label_values(&[&name]).set(status.incoming_broadcast_bytes as f64);
+                
+                    // Assuming `status` has fields like user_transfer_bytes, user_transfer_packets per user
+                    for (user, bytes) in status.user_transfer_bytes.iter() {
+                        USER_TRANSFER_BYTES.with_label_values(&[&name, user]).set(*bytes as f64);
                     }
-                    for (user, bytes) in &transfer_bytes {
-                        USER_TRANSFER_BYTES
-                            .with_label_values(&[&status.name, user])
-                            .set(*bytes);
+                    for (user, packets) in status.user_transfer_packets.iter() {
+                        USER_TRANSFER_PACKETS.with_label_values(&[&name, user]).set(*packets as f64);
                     }
-                    for (user, packets) in &transfer_packets {
-                        USER_TRANSFER_PACKETS
-                            .with_label_values(&[&status.name, user])
-                            .set(*packets);
-                    }
-                }
-
+                }                
 
                 // Gather and encode metrics
                 let metric_familys = prometheus::gather();
                 let mut buffer = vec![];
                 encoder.encode(&metric_familys, &mut buffer).unwrap();
-                res.headers_mut()
-                   .set(ContentType(encoder.format_type().parse::<Mime>().unwrap()));
+                res.headers_mut().set(ContentType(encoder.format_type().parse::<Mime>().unwrap()));
                 res.send(&buffer).unwrap();
             } else {
                 // Landing page response
-                res.headers_mut()
-                   .set(ContentType(Mime(TopLevel::Text, SubLevel::Html, vec![])));
+                res.headers_mut().set(ContentType(Mime(TopLevel::Text, SubLevel::Html, vec![])));
                 res.send(LANDING_PAGE.as_bytes()).unwrap();
             }
 
-            thread::sleep_ms(sleep.parse::<u32>().unwrap());
+            thread::sleep(Duration::from_millis(sleep));
         })?;
 
         Ok(())
