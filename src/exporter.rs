@@ -196,8 +196,8 @@ impl Exporter {
                 // Refresh SoftEther metrics for each hub
                 for hub in hubs.clone() {
                     let name = hub.name.unwrap_or(String::from(""));
-                    let password = hub.password.unwrap_or(String::from(""));
-                    let status = match SoftEtherReader::hub_status(&vpncmd, &server, &name, &password) {
+                    // Remove password from the hub status check
+                    let status = match SoftEtherReader::hub_status(&vpncmd, &server, &name) {
                         Ok(x) => x,
                         Err(x) => {
                             UP.with_label_values(&[&name]).set(0.0);
