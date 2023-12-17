@@ -1,5 +1,4 @@
 use crate::softether_reader::SoftEtherReader;
-use sysinfo::{System, SystemExt, ProcessorExt, DiskExt};
 use anyhow::Error;
 use hyper::header::ContentType;
 use hyper::mime::{Mime, SubLevel, TopLevel};
@@ -15,13 +14,9 @@ use std::io::Read;
 use std::path::Path;
 use toml;
 use std::thread;
+use sysinfo::{System, SystemExt, ProcessorExt, DiskExt};
 
 lazy_static! {
-    static ref BUILD_INFO: GaugeVec = register_gauge_vec!(
-        "softether_build_info",
-        "A metric with a constant '1' value labeled by version, revision, and rustversion",
-        &["version", "revision", "rustversion"]
-    ).unwrap();
     static ref UP: GaugeVec =
         register_gauge_vec!("softether_up", "The last query is successful.", &["hub"]).unwrap();
     static ref ONLINE: GaugeVec =
@@ -104,8 +99,7 @@ lazy_static! {
         "User transfer in packets.",
         &["hub", "user"]
     ).unwrap();
-
-    // System metrics
+    // New system metrics
     static ref SYSTEM_CPU_LOAD: Gauge = register_gauge!(
         "system_cpu_load",
         "Current system CPU load as a percentage."
@@ -157,9 +151,6 @@ impl Config {
     }
 }
 
-for hub in hubs.clone() {
-    let name = hub.name.unwrap_or(String::from(""));
-    let password = hub.password.unwrap_or(String::from(""));
 pub struct Exporter;
 
 impl Exporter {
@@ -207,70 +198,73 @@ impl Exporter {
                 for hub in hubs.clone() {
                     let name = hub.name.unwrap_or(String::from(""));
                     let password = hub.password.unwrap_or(String::from(""));
-                
-                    // ... existing logic for setting SoftEther metrics ...
-                let status = match SoftEtherReader::hub_status(&vpncmd, &server, &name, &password) {
-                    Ok(x) => x,
-                    Err(x) => {
-                        UP.with_label_values(&[&name]).set(0.0);
-                        println!("Hub status read failed: {}", x);
-                        continue;
-                    }
-                };
+                    let status = match SoftEtherReader::hub_status(&vpncmd, &server, &name, &password) {
+                        Ok(x) => x,
+                        Err(x) => {
+                            UP.with_label_values(&[&name]).set(0.0);
+                            println!("Hub status read failed: {}", x);
+                            continue;
+                        }
+                    };
 
-                let sessions = match SoftEtherReader::hub_sessions(&vpncmd, &server, &name, &password) {
-                    Ok(x) => x,
-                    Err(x) => {
-                        UP.with_label_values(&[&name]).set(0.0);
-                        println!("Hub sessions read failed: {}", x);
-                        continue;
-                    }
-                };
+                    let sessions = match SoftEtherReader::hub_sessions(&vpncmd, &server, &name, &password) {
+                        Ok(x) => x,
+                        Err(x) => {
+                            UP.with_label_values(&[&name]).set(0.0);
+                            println!("Hub sessions read failed: {}", x);
+                            continue;
+                        }
+                    };
 
-                UP.with_label_values(&[&status.name]).set(1.0);
-                ONLINE.with_label_values(&[&status.name]).set(if status.online { 1.0 } else { 0.0 });
-                SESSIONS.with_label_values(&[&status.name]).set(status.sessions);
-                SESSIONS_CLIENT.with_label_values(&[&status.name]).set(status.sessions_client);
-                SESSIONS_BRIDGE.with_label_values(&[&status.name]).set(status.sessions_bridge);
-                USERS.with_label_values(&[&status.name]).set(status.users);
-                GROUPS.with_label_values(&[&status.name]).set(status.groups);
-                MAC_TABLES.with_label_values(&[&status.name]).set(status.mac_tables);
-                IP_TABLES.with_label_values(&[&status.name]).set(status.ip_tables);
-                LOGINS.with_label_values(&[&status.name]).set(status.logins);
-                OUTGOING_UNICAST_PACKETS.with_label_values(&[&status.name]).set(status.outgoing_unicast_packets);
-                OUTGOING_UNICAST_BYTES.with_label_values(&[&status.name]).set(status.outgoing_unicast_bytes);
-                OUTGOING_BROADCAST_PACKETS.with_label_values(&[&status.name]).set(status.outgoing_broadcast_packets);
-                OUTGOING_BROADCAST_BYTES.with_label_values(&[&status.name]).set(status.outgoing_broadcast_bytes);
-                INCOMING_UNICAST_PACKETS.with_label_values(&[&status.name]).set(status.incoming_unicast_packets);
-                INCOMING_UNICAST_BYTES.with_label_values(&[&status.name]).set(status.incoming_unicast_bytes);
-                INCOMING_BROADCAST_PACKETS.with_label_values(&[&status.name]).set(status.incoming_broadcast_packets);
-                INCOMING_BROADCAST_BYTES.with_label_values(&[&status.name]).set(status.incoming_broadcast_bytes);
+                    UP.with_label_values(&[&status.name]).set(1.0);
+                    ONLINE.with_label_values(&[&status.name]).set(if status.online { 1.0 } else { 0.0 });
+                    SESSIONS.with_label_values(&[&status.name]).set(status.sessions);
+                    SESSIONS_CLIENT.with_label_values(&[&status.name]).set(status.sessions_client);
+                    SESSIONS_BRIDGE.with_label_values(&[&status.name]).set(status.sessions_bridge);
+                    USERS.with_label_values(&[&status.name]).set(status.users);
+                    GROUPS.with_label_values(&[&status.name]).set(status.groups);
+                    MAC_TABLES.with_label_values(&[&status.name]).set(status.mac_tables);
+                    IP_TABLES.with_label_values(&[&status.name]).set(status.ip_tables);
+                    LOGINS.with_label_values(&[&status.name]).set(status.logins);
+                    OUTGOING_UNICAST_PACKETS.with_label_values(&[&status.name]).set(status.outgoing_unicast_packets);
+                    OUTGOING_UNICAST_BYTES.with_label_values(&[&status.name]).set(status.outgoing_unicast_bytes);
+                    OUTGOING_BROADCAST_PACKETS.with_label_values(&[&status.name]).set(status.outgoing_broadcast_packets);
+                    OUTGOING_BROADCAST_BYTES.with_label_values(&[&status.name]).set(status.outgoing_broadcast_bytes);
+                    INCOMING_UNICAST_PACKETS.with_label_values(&[&status.name]).set(status.incoming_unicast_packets);
+                    INCOMING_UNICAST_BYTES.with_label_values(&[&status.name]).set(status.incoming_unicast_bytes);
+                    INCOMING_BROADCAST_PACKETS.with_label_values(&[&status.name]).set(status.incoming_broadcast_packets);
+                    INCOMING_BROADCAST_BYTES.with_label_values(&[&status.name]).set(status.incoming_broadcast_bytes);
 
-                let mut transfer_bytes = HashMap::new();
-                let mut transfer_packets = HashMap::new();
-                for session in sessions {
-                    if let Some(val) = transfer_bytes.get(&session.user) {
-                        let val = val + session.transfer_bytes;
-                        transfer_bytes.insert(session.user.clone(), val);
-                    } else {
-                        let val = session.transfer_bytes;
-                        transfer_bytes.insert(session.user.clone(), val);
+                    let mut transfer_bytes = HashMap::new();
+                    let mut transfer_packets = HashMap::new();
+                    for session in sessions {
+                        if let Some(val) = transfer_bytes.get(&session.user) {
+                            let val = val + session.transfer_bytes;
+                            transfer_bytes.insert(session.user.clone(), val);
+                        } else {
+                            let val = session.transfer_bytes;
+                            transfer_bytes.insert(session.user.clone(), val);
+                        }
+                        if let Some(val) = transfer_packets.get(&session.user) {
+                            let val = val + session.transfer_packets;
+                            transfer_packets.insert(session.user.clone(), val);
+                        } else {
+                            let val = session.transfer_packets;
+                            transfer_packets.insert(session.user.clone(), val);
+                        }
                     }
-                    if let Some(val) = transfer_packets.get(&session.user) {
-                        let val = val + session.transfer_packets;
-                        transfer_packets.insert(session.user.clone(), val);
-                    } else {
-                        let val = session.transfer_packets;
-                        transfer_packets.insert(session.user.clone(), val);
+                    for (user, bytes) in &transfer_bytes {
+                        USER_TRANSFER_BYTES
+                            .with_label_values(&[&status.name, user])
+                            .set(*bytes);
+                    }
+                    for (user, packets) in &transfer_packets {
+                        USER_TRANSFER_PACKETS
+                            .with_label_values(&[&status.name, user])
+                            .set(*packets);
                     }
                 }
-                for (user, bytes) in &transfer_bytes {
-                    USER_TRANSFER_BYTES.with_label_values(&[&status.name, user]).set(*bytes);
-                }
-                for (user, packets) in &transfer_packets {
-                    USER_TRANSFER_PACKETS.with_label_values(&[&status.name, user]).set(*packets);
-                }
-                }
+
 
                 // Gather and encode metrics
                 let metric_familys = prometheus::gather();
@@ -291,5 +285,4 @@ impl Exporter {
 
         Ok(())
     }
-}
 }
