@@ -166,11 +166,12 @@ impl Exporter {
                 }
 
                 if let Ok(mem) = sys.memory() {
-                    SYSTEM_MEMORY_FREE.set(mem.free.as_u64());
+                    SYSTEM_MEMORY_FREE.set(mem.free.as_u64() as f64);
                 }
 
                 if let Ok(mounts) = sys.mounts() {
-                    SYSTEM_FREE_DISK_SPACE.set(u64 = mounts.iter().map(|m| m.avail.as_u64()).sum());
+                    let total_free_space: u64 = mounts.iter().map(|m| m.avail.as_u64()).sum();
+                    SYSTEM_FREE_DISK_SPACE.set(total_free_space as f64);
                 }
 
                 if let Ok(load_avg) = sys.load_average() {
