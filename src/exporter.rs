@@ -153,9 +153,16 @@ impl Exporter {
             if req.uri == RequestUri::AbsolutePath("/metrics".to_string()) {
                 let sys = System::new();
 
-                if let Ok(load) = sys.load_average() {
-                    let cpu_load = load.one; // 1-minute average
-                    SYSTEM_CPU_LOAD.set(cpu_load.into());
+                // Start measuring CPU load
+                if let Ok(cpu_load_measurement) = sys.cpu_load_aggregate() {
+                    // Wait for a short period to allow the measurement to complete
+                    thread::sleep(Duration::from_secs(1));
+
+                    // Retrieve and process the CPU load measurement
+                    if let Ok(cpu_load) = cpu_load_measurement.done() {
+                        // Set the SYSTEM_CPU_LOAD gauge
+                        SYSTEM_CPU_LOAD.set(cpu_load.user * 100.0);
+                    }
                 }
 
                 if let Ok(mem) = sys.memory() {
