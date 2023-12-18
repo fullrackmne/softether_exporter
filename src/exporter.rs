@@ -166,13 +166,25 @@ impl Exporter {
                 }
 
                 if let Ok(mem) = sys.memory() {
-                    SYSTEM_MEMORY_FREE.set(mem.free.as_u64() as f64);
+                    // Free physical memory in bytes
+                    let free_memory: u64 = mem.free.as_u64();
+                    SYSTEM_MEMORY_FREE.set(free_memory as f64);
                 }
+                
 
                 if let Ok(mounts) = sys.mounts() {
-                    let total_free_space: u64 = mounts.iter().map(|m| m.avail.as_u64()).sum();
-                    SYSTEM_FREE_DISK_SPACE.set(total_free_space as f64);
+                    for mount in mounts.iter() {
+                        if mount.fs_mounted_on == "/" {
+                            // This is the root filesystem
+                            let free_space: u64 = mount.avail.as_u64();
+                
+                            // Set the gauge to the free space in bytes
+                            SYSTEM_FREE_DISK_SPACE.set(free_space as f64);
+                            break; // No need to check other mounts
+                        }
+                    }
                 }
+                
 
                 if let Ok(load_avg) = sys.load_average() {
                     SYSTEM_LOAD_AVERAGE.with_label_values(&["1_min"]).set(load_avg.one.into());
