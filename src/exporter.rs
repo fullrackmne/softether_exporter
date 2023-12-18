@@ -60,11 +60,11 @@ lazy_static! {
     ).unwrap();
     static ref SYSTEM_MEMORY_FREE: Gauge = register_gauge!(
         "system_memory_free",
-        "Free memory in the system in KBs"
+        "Free memory in the system in bytes"
     ).unwrap();
     static ref SYSTEM_FREE_DISK_SPACE: Gauge = register_gauge!(
         "system_free_disk_space",
-        "Free disk space on the system in GBs"
+        "Free disk space on the system in bytes"
     ).unwrap();
     static ref SYSTEM_LOAD_AVERAGE: GaugeVec = register_gauge_vec!(
         "system_load_average",
@@ -202,12 +202,22 @@ impl Exporter {
                 
                 if let Ok(networks) = sys.networks() {
                     for (interface_name, network) in networks.iter() {
-                        if let Ok(stats) = sys.network_stats(interface_name) {
-                            SYSTEM_NETWORK_PACKETS_IN.with_label_values(&[interface_name]).set(stats.rx_packets as f64);
-                            SYSTEM_NETWORK_PACKETS_OUT.with_label_values(&[interface_name]).set(stats.tx_packets as f64);
+                        // Add a condition to check if the interface is a physical ethernet interface
+                        if is_physical_ethernet(interface_name) {
+                            if let Ok(stats) = sys.network_stats(interface_name) {
+                                SYSTEM_NETWORK_PACKETS_IN.with_label_values(&[interface_name]).set(stats.rx_packets as f64);
+                                SYSTEM_NETWORK_PACKETS_OUT.with_label_values(&[interface_name]).set(stats.tx_packets as f64);
+                            }
                         }
                     }
-                }            
+                }
+                
+                // Define a function to determine if an interface is a physical ethernet interface
+                fn is_physical_ethernet(interface_name: &str) -> bool {
+                    // Implement the logic to check if the interface is a physical ethernet interface
+                    interface_name.starts_with("eth") || interface_name.starts_with("en")
+                }
+                          
                 
                 // Refresh SoftEther metrics for each hub
                 for hub in hubs.clone() {
