@@ -161,7 +161,7 @@ impl Exporter {
                     // Retrieve and process the CPU load measurement
                     if let Ok(cpu_load) = cpu_load_measurement.done() {
                         // Set the SYSTEM_CPU_LOAD gauge
-                        SYSTEM_CPU_LOAD.set(cpu_load.user * 100.0);
+                        SYSTEM_CPU_LOAD.set((cpu_load.user * 100.0).into());
                     }
                 }
 
