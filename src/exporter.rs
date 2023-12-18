@@ -58,13 +58,13 @@ lazy_static! {
         "system_cpu_load",
         "Current system CPU load as a percentage."
     ).unwrap();
-    static ref SYSTEM_MEMORY_USAGE: Gauge = register_gauge!(
-        "system_memory_usage",
-        "Used memory in the system as a percentage."
+    static ref SYSTEM_MEMORY_FREE: Gauge = register_gauge!(
+        "system_memory_free",
+        "Free memory in the system in KBs"
     ).unwrap();
     static ref SYSTEM_FREE_DISK_SPACE: Gauge = register_gauge!(
         "system_free_disk_space",
-        "Free disk space on the system as a percentage."
+        "Free disk space on the system in GBs"
     ).unwrap();
     static ref SYSTEM_LOAD_AVERAGE: GaugeVec = register_gauge_vec!(
         "system_load_average",
@@ -166,15 +166,11 @@ impl Exporter {
                 }
 
                 if let Ok(mem) = sys.memory() {
-                    let memory_usage = (mem.total.as_u64() - mem.free.as_u64()) as f64 / mem.total.as_u64() as f64 * 100.0;
-                    SYSTEM_MEMORY_USAGE.set(memory_usage);
+                    SYSTEM_MEMORY_FREE.set(mem.free.as_u64());
                 }
 
                 if let Ok(mounts) = sys.mounts() {
-                    let total_space: u64 = mounts.iter().map(|m| m.total.as_u64()).sum();
-                    let total_free: u64 = mounts.iter().map(|m| m.avail.as_u64()).sum();
-                    let disk_usage = (total_space - total_free) as f64 / total_space as f64 * 100.0;
-                    SYSTEM_FREE_DISK_SPACE.set(disk_usage);
+                    SYSTEM_FREE_DISK_SPACE.set(u64 = mounts.iter().map(|m| m.avail.as_u64()).sum());
                 }
 
                 if let Ok(load_avg) = sys.load_average() {
